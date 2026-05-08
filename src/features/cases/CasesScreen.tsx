@@ -23,6 +23,7 @@ import {
 import {
   colors,
   radius,
+  shadow,
   accentSurface,
   toVisualAccent,
 } from "@/ui/tokens/colors";
@@ -275,7 +276,7 @@ function SortMenu({
             background: colors.paperLow,
             border: `1px solid ${colors.hairlineStrong}`,
             borderRadius: radius.md,
-            boxShadow: "0 10px 30px rgba(14,14,12,0.10)",
+            boxShadow: shadow.lg,
             zIndex: 30,
           }}
         >
@@ -353,8 +354,8 @@ function FilterChip({
           fontSize: 10,
           padding: "1px 5px",
           borderRadius: 999,
-          background: active ? "rgba(255,255,255,0.14)" : tone ? `${accent}18` : colors.paperWarm,
-          color: active ? "rgba(255,255,255,0.85)" : accent,
+          background: active ? "rgba(128,128,128,0.18)" : tone === "moss" ? colors.mossSoft : tone === "solar" ? colors.solarSoft : colors.paperWarm,
+          color: active ? colors.paper : accent,
         }}
       >
         {String(count).padStart(2, "0")}

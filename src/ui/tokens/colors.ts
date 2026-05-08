@@ -1,41 +1,49 @@
+/* All values reference CSS custom properties defined in global.css.
+   Dark mode is handled by [data-theme="dark"] on <html>. */
+
 export const colors = {
-  // surfaces
-  paper: "#F8F3E4",
-  paperLow: "#FBF8EC",
-  paperWarm: "#F1EAD4",
-  paperTile: "#FDFAEF",
+  // ── Surfaces ────────────────────────────────────────────────
+  paper:     "var(--paper)",
+  paperLow:  "var(--paper-low)",
+  paperWarm: "var(--paper-warm)",
+  paperWarmHover: "var(--paper-warm-hover)",
+  paperTile: "var(--paper-tile)",
 
-  // ink
-  ink: "#0E0E0C",
-  inkSoft: "#2A2A26",
-  inkMute: "#5C5C56",
-  inkFade: "#8E8E86",
+  // ── Ink / text ───────────────────────────────────────────────
+  ink:       "var(--ink)",
+  inkSoft:   "var(--ink-soft)",
+  inkMute:   "var(--ink-mute)",
+  inkFade:   "var(--ink-fade)",
 
-  // accents (used sparingly)
-  ember: "#E63946",
-  emberSoft: "#FBE4E5",
-  solar: "#FFD23F",
-  solarSoft: "#FFF6D2",
-  moss: "#2A9D8F",
-  mossSoft: "#DCEEEA",
-  sky: "#4C8BF5",
-  skySoft: "#E1ECFE",
+  // ── Accents ──────────────────────────────────────────────────
+  ember:     "var(--ember)",
+  emberSoft: "var(--ember-soft)",
+  solar:     "var(--solar)",
+  solarSoft: "var(--solar-soft)",
+  moss:      "var(--moss)",
+  mossSoft:  "var(--moss-soft)",
+  sky:       "var(--sky)",
+  skySoft:   "var(--sky-soft)",
 
-  // hairlines & shadows
-  hairline: "rgba(14, 14, 12, 0.06)",
-  hairlineStrong: "rgba(14, 14, 12, 0.12)",
-  shadowSm: "0 1px 2px rgba(14, 14, 12, 0.05)",
-  shadowMd: "0 4px 14px rgba(14, 14, 12, 0.06)",
-  shadowLg: "0 14px 40px rgba(14, 14, 12, 0.08)",
+  // ── Structural ───────────────────────────────────────────────
+  hairline:       "var(--hairline)",
+  hairlineStrong: "var(--hairline-strong)",
+  backdrop:       "var(--backdrop)",
+  focusRing:      "var(--focus-ring)",
+
+  // ── Static — never flip with theme ───────────────────────────
+  // Used for text/fg on accent-colored surfaces (buttons, badges, icons)
+  // where contrast must be guaranteed regardless of theme.
+  onAccent: "#F8F3E4",   // cream — legible on ember/moss/solar/sky/ink surfaces
 } as const;
 
 export type ColorToken = keyof typeof colors;
 
-/** Visual accents available in the design system (UI palette). */
+/** Visual accents available in the design system. */
 export const visualAccents = ["ember", "solar", "moss", "sky"] as const;
 export type VisualAccent = (typeof visualAccents)[number];
 
-/** Backward-compat alias — `Accent` historically meant the visual one in tokens. */
+/** Legacy alias */
 export type Accent = VisualAccent;
 
 export const accentSurface: Record<VisualAccent, { fg: string; bg: string; soft: string }> = {
@@ -45,7 +53,7 @@ export const accentSurface: Record<VisualAccent, { fg: string; bg: string; soft:
   sky:   { fg: colors.sky,   bg: colors.sky,   soft: colors.skySoft   },
 };
 
-/** Map the schema-level accent (which still includes the legacy "ink") to a visual accent. */
+/** Map the schema-level accent to a visual accent. */
 export function toVisualAccent(a: string | null | undefined): VisualAccent {
   if (a === "ember" || a === "solar" || a === "moss" || a === "sky") return a;
   if (a === "ink") return "sky";
@@ -53,18 +61,18 @@ export function toVisualAccent(a: string | null | undefined): VisualAccent {
 }
 
 export const radius = {
-  xs: 6,
-  sm: 10,
-  md: 14,
-  lg: 20,
-  xl: 28,
+  xs:   6,
+  sm:   10,
+  md:   14,
+  lg:   20,
+  xl:   28,
   pill: 999,
 } as const;
 
 export const shadow = {
-  sm: colors.shadowSm,
-  md: colors.shadowMd,
-  lg: colors.shadowLg,
+  sm: "var(--shadow-sm)",
+  md: "var(--shadow-md)",
+  lg: "var(--shadow-lg)",
 } as const;
 
 export const entityColor: Record<string, Accent> = {

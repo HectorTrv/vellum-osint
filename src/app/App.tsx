@@ -32,9 +32,14 @@ import { useShortcut } from "@/lib/shortcuts";
 import { createDemoCase } from "@/lib/demoCase";
 import { toast } from "@/lib/toasts";
 import { api, isTauri } from "@/lib/api";
+import { useTheme, applyTheme } from "@/lib/themeStore";
 
 export function App() {
   const route = useRouter((s) => s.route);
+  const themeMode = useTheme((s) => s.mode);
+
+  // Sync CSS data-theme attribute whenever mode changes (and on first mount)
+  useEffect(() => { applyTheme(themeMode); }, [themeMode]);
   const setRoute = useRouter((s) => s.setRoute);
   const openCase = useRouter((s) => s.openCase);
   const refresh = useCases((s) => s.refresh);

@@ -57,7 +57,8 @@ export function Toaster() {
                 <div
                   style={{
                     fontSize: 12.5,
-                    color: "rgba(245,239,224,0.72)",
+                    color: colors.paper,
+              opacity: 0.72,
                     marginTop: 2,
                   }}
                 >
@@ -94,7 +95,8 @@ export function Toaster() {
                 height: 22,
                 display: "grid",
                 placeItems: "center",
-                color: "rgba(245,239,224,0.5)",
+                color: colors.paper,
+              opacity: 0.5,
                 cursor: "pointer",
                 flexShrink: 0,
               }}
@@ -109,11 +111,16 @@ export function Toaster() {
 }
 
 function ToastIcon({ variant }: { variant?: string }) {
-  const c =
+  const fg =
     variant === "success" ? colors.moss :
     variant === "error"   ? colors.ember :
     variant === "info"    ? colors.sky :
                             colors.solar;
+  const bg =
+    variant === "success" ? colors.mossSoft :
+    variant === "error"   ? colors.emberSoft :
+    variant === "info"    ? colors.skySoft :
+                            colors.solarSoft;
   const Icon =
     variant === "success" ? Check :
     variant === "error"   ? AlertTriangle :
@@ -124,8 +131,8 @@ function ToastIcon({ variant }: { variant?: string }) {
         width: 26,
         height: 26,
         borderRadius: 8,
-        background: `${c}33`,
-        color: c,
+        background: bg,
+        color: fg,
         display: "grid",
         placeItems: "center",
         flexShrink: 0,

@@ -31,7 +31,7 @@ export function Modal({ open, onClose, title, children, width = 520 }: Props) {
           style={{
             position: "fixed",
             inset: 0,
-            background: "rgba(14,14,12,0.42)",
+            background: colors.backdrop,
             backdropFilter: "blur(6px)",
             display: "grid",
             placeItems: "center",

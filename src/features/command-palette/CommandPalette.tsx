@@ -68,7 +68,7 @@ export function CommandPalette() {
           style={{
             position: "fixed",
             inset: 0,
-            background: "rgba(14,14,12,0.42)",
+            background: colors.backdrop,
             backdropFilter: "blur(8px)",
             display: "grid",
             placeItems: "start center",

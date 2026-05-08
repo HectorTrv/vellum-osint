@@ -570,7 +570,7 @@ export function ReportsScreen() {
               <Eyebrow color={colors.solar}>Export</Eyebrow>
               <Badge tone="moss" dot>Chain verified</Badge>
             </div>
-            <Body style={{ color: "rgba(245,239,224,0.85)" }}>
+            <Body style={{ color: colors.paper, opacity: 0.85 }}>
               PDF includes a verification page with the HMAC chain. Re-run via{" "}
               <span style={{ fontFamily: "var(--font-mono)", color: colors.solar }}>
                 vellum verify report.pdf
@@ -610,7 +610,7 @@ export function ReportsScreen() {
                 disabled={!c || dataLoading}
                 onClick={() => c && downloadMarkdown(c, entities, relations, events, draft)}
                 style={{
-                  background: "rgba(245,239,224,0.08)",
+                  background: "rgba(128,128,128,0.12)",
                   color: colors.paper,
                   opacity: !c ? 0.45 : 1,
                 }}

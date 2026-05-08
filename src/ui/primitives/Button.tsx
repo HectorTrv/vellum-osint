@@ -24,17 +24,17 @@ const HEIGHTS: Record<Size, number> = { sm: 32, md: 40, lg: 48 };
 function paint(variant: Variant) {
   switch (variant) {
     case "primary":
-      return { bg: colors.ink,        fg: colors.paper, hoverBg: colors.inkSoft };
+      return { bg: colors.ink,        fg: colors.onAccent, hoverBg: colors.inkSoft };
     case "secondary":
-      return { bg: colors.paperWarm,  fg: colors.ink,   hoverBg: "#E7DFC4" };
+      return { bg: colors.paperWarm,  fg: colors.ink,   hoverBg: colors.paperWarmHover };
     case "ember":
-      return { bg: colors.ember,      fg: colors.paper, hoverBg: "#D32F3D" };
+      return { bg: colors.ember,      fg: colors.onAccent, hoverBg: "#D32F3D" };
     case "solar":
-      return { bg: colors.solar,      fg: colors.ink,   hoverBg: "#F2C436" };
+      return { bg: colors.solar,      fg: colors.ink,      hoverBg: "#F2C436" };
     case "moss":
-      return { bg: colors.moss,       fg: colors.paper, hoverBg: "#258C7F" };
+      return { bg: colors.moss,       fg: colors.onAccent, hoverBg: "#258C7F" };
     case "danger":
-      return { bg: colors.emberSoft,  fg: colors.ember, hoverBg: "#F8D6D8" };
+      return { bg: colors.emberSoft,  fg: colors.ember,    hoverBg: colors.emberSoft };
     case "ghost":
     default:
       return { bg: "transparent",     fg: colors.ink,   hoverBg: colors.hairline };
@@ -83,7 +83,7 @@ export function Button({
         ...style,
       }}
       onFocus={(e) => {
-        e.currentTarget.style.boxShadow = `0 0 0 3px ${colors.ink}1F, ${variant === "ghost" ? "none" : shadow.sm}`;
+        e.currentTarget.style.boxShadow = `0 0 0 3px ${colors.focusRing}, ${variant === "ghost" ? "none" : shadow.sm}`;
         rest.onFocus?.(e);
       }}
       onBlur={(e) => {

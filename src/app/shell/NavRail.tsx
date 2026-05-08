@@ -6,11 +6,14 @@ import {
   History,
   FileText,
   Settings,
+  Moon,
+  Sun,
   type LucideIcon,
 } from "lucide-react";
 import { colors, radius } from "@/ui/tokens/colors";
 import { useRouter, type Route } from "@/app/router";
 import { Tooltip } from "@/ui/primitives/Tooltip";
+import { useTheme } from "@/lib/themeStore";
 
 const ITEMS: { id: Route; label: string; Icon: LucideIcon }[] = [
   { id: "cover",    label: "Home",   Icon: Home },
@@ -24,6 +27,8 @@ export function NavRail() {
   const route = useRouter((s) => s.route);
   const setRoute = useRouter((s) => s.setRoute);
   const isCaseDetail = route === "caseDetail";
+  const themeMode = useTheme((s) => s.mode);
+  const toggleTheme = useTheme((s) => s.toggle);
   return (
     <aside
       style={{
@@ -130,6 +135,31 @@ export function NavRail() {
       })}
 
       <div style={{ flex: 1 }} />
+
+      {/* Theme toggle */}
+      <Tooltip label={themeMode === "light" ? "Dark mode" : "Light mode"} side="top">
+        <button
+          onClick={toggleTheme}
+          aria-label="Toggle theme"
+          data-no-transition
+          style={{
+            width: 36,
+            height: 36,
+            display: "grid",
+            placeItems: "center",
+            borderRadius: radius.md,
+            background: "transparent",
+            color: colors.inkMute,
+            cursor: "pointer",
+            marginBottom: 4,
+          }}
+        >
+          {themeMode === "light"
+            ? <Moon size={15} strokeWidth={1.8} />
+            : <Sun size={15} strokeWidth={1.8} />
+          }
+        </button>
+      </Tooltip>
 
       {/* Settings */}
       <Tooltip label="Settings" side="top">
