@@ -85,3 +85,13 @@ export type AppInfo = {
   edition: string;
   vaultPath: string;
 };
+
+export type Classification = "Confidential" | "Internal" | "Restricted" | "Public";
+
+export type ReportDraft = {
+  title: string;
+  classification: Classification;
+  summary: string;
+  analyst: string;
+  sections: Record<string, { enabled: boolean; notes: string }>;
+};

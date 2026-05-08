@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { PDFDownloadLink } from "@react-pdf/renderer";
-import { motion } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import {
   FileSignature,
   Boxes,
@@ -11,9 +11,9 @@ import {
   FileDown,
   FileCode,
   Check,
-  MoreHorizontal,
-  Sparkles,
   ChevronDown,
+  ChevronRight,
+  Sparkles,
   type LucideIcon,
 } from "lucide-react";
 import { colors, radius, shadow } from "@/ui/tokens/colors";
@@ -23,12 +23,11 @@ import { Card } from "@/ui/primitives/Card";
 import { Button } from "@/ui/primitives/Button";
 import { Badge } from "@/ui/primitives/Badge";
 import { IconTile } from "@/ui/primitives/IconTile";
-import { ListRow } from "@/ui/primitives/ListRow";
 import { useRouter } from "@/app/router";
 import { useCases } from "@/lib/casesStore";
 import { useEntities } from "@/lib/entitiesStore";
 import { VellumPdfDocument } from "./PdfDocument";
-import type { Case, Entity, Relation, Event as DomainEvent } from "@/lib/types";
+import type { Case, Entity, Relation, Event as DomainEvent, ReportDraft, Classification } from "@/lib/types";
 
 // ── Section manifest ─────────────────────────────────────────────────────────
 const SECTIONS: {
@@ -36,26 +35,45 @@ const SECTIONS: {
   title: string;
   Icon: LucideIcon;
   tone: "ember" | "solar" | "moss" | "sky";
-  active?: boolean;
+  defaultEnabled: boolean;
 }[] = [
-  { idx: "01", title: "Cover · Case Summary",       Icon: FileSignature, tone: "ember", active: true },
-  { idx: "02", title: "Entities Index",             Icon: Boxes,         tone: "sky" },
-  { idx: "03", title: "Relations Map",              Icon: Network,       tone: "moss" },
-  { idx: "04", title: "Timeline · Ledger",          Icon: History,       tone: "solar" },
-  { idx: "05", title: "Hash Chain Verification",    Icon: ShieldCheck,   tone: "ember" },
-  { idx: "06", title: "Appendix · Attachments",     Icon: Paperclip,     tone: "sky" },
+  { idx: "01", title: "Cover · Case Summary",    Icon: FileSignature, tone: "ember", defaultEnabled: true  },
+  { idx: "02", title: "Entities Index",           Icon: Boxes,         tone: "sky",   defaultEnabled: true  },
+  { idx: "03", title: "Relations Map",            Icon: Network,       tone: "moss",  defaultEnabled: true  },
+  { idx: "04", title: "Timeline · Ledger",        Icon: History,       tone: "solar", defaultEnabled: true  },
+  { idx: "05", title: "Hash Chain Verification",  Icon: ShieldCheck,   tone: "ember", defaultEnabled: true  },
+  { idx: "06", title: "Appendix · Attachments",   Icon: Paperclip,     tone: "sky",   defaultEnabled: false },
 ];
 
-// ── Markdown exporter ────────────────────────────────────────────────────────
-function summarizeEventMd(e: DomainEvent): string {
+const CLASSIFICATIONS: Classification[] = ["Confidential", "Internal", "Restricted", "Public"];
+
+const classificationColors: Record<Classification, { bg: string; fg: string }> = {
+  Confidential: { bg: colors.emberSoft,  fg: colors.ember },
+  Internal:     { bg: colors.solarSoft,  fg: "#A07810"    },
+  Restricted:   { bg: "#EEE8FF",         fg: "#7C3AED"    },
+  Public:       { bg: colors.mossSoft,   fg: colors.moss  },
+};
+
+// ── Draft factory ─────────────────────────────────────────────────────────────
+function makeDraft(title: string): ReportDraft {
+  return {
+    title,
+    classification: "Confidential",
+    summary: "",
+    analyst: "",
+    sections: Object.fromEntries(
+      SECTIONS.map((s) => [s.idx, { enabled: s.defaultEnabled, notes: "" }])
+    ),
+  };
+}
+
+// ── Markdown export ──────────────────────────────────────────────────────────
+function summarizeMd(e: DomainEvent): string {
   const p = e.payload as Record<string, unknown>;
   switch (e.kind) {
     case "case.create":     return `Case opened — ${p.title ?? ""}`;
-    case "case.status":     return `Status changed ${p.from} → ${p.to}`;
-    case "entity.create":   return `Added ${p.kind ?? "entity"} · ${p.label ?? p.id ?? ""}`;
+    case "entity.create":   return `Added ${p.kind ?? "entity"} · ${p.label ?? ""}`;
     case "relation.create": return `Linked ${p.from} → ${p.to} (${p.kind})`;
-    case "enrich.hibp":     return `HIBP: ${(p.breaches as string[] | undefined)?.length ?? 0} breaches`;
-    case "enrich.whois":    return `Whois: ${p.domain} registered ${p.registered}`;
     case "note":            return `Note — ${String(p.body ?? "").slice(0, 80)}`;
     default:                return e.kind;
   }
@@ -66,15 +84,20 @@ function downloadMarkdown(
   entities: Entity[],
   relations: Relation[],
   events: DomainEvent[],
+  draft: ReportDraft,
 ) {
+  const title = draft.title.trim() || c.title;
   const entityMap = new Map(entities.map((e) => [e.id, e]));
   const lines = [
-    `# ${c.title}`,
+    `# ${title}`,
     ``,
+    `**Classification:** ${draft.classification}  `,
     `**Type:** ${c.kind}  `,
     `**Status:** ${c.status}  `,
+    `**Analyst:** ${draft.analyst.trim() || "Vellum OSINT Studio"}  `,
     `**Opened:** ${new Date(c.createdAt).toLocaleDateString("en-GB")}  `,
     `**Case ID:** \`${c.id.toUpperCase()}\`  `,
+    ...(draft.summary.trim() ? [``, `## Executive Summary`, ``, draft.summary.trim()] : []),
     ``,
     `---`,
     ``,
@@ -83,8 +106,7 @@ function downloadMarkdown(
     `| Kind | Label | Confidence | First seen |`,
     `|------|-------|------------|------------|`,
     ...entities.map(
-      (e) =>
-        `| ${e.kind} | ${e.label} | ${Math.round(e.confidence * 100)}% | ${new Date(e.firstSeen).toLocaleDateString("en-GB")} |`
+      (e) => `| ${e.kind} | ${e.label} | ${Math.round(e.confidence * 100)}% | ${new Date(e.firstSeen).toLocaleDateString("en-GB")} |`
     ),
     ``,
     `## Relations (${relations.length})`,
@@ -93,76 +115,230 @@ function downloadMarkdown(
     `|------|------|----|------------|`,
     ...relations.map((r) => {
       const from = entityMap.get(r.fromEntity)?.label ?? r.fromEntity.slice(0, 8);
-      const to = entityMap.get(r.toEntity)?.label ?? r.toEntity.slice(0, 8);
+      const to   = entityMap.get(r.toEntity)?.label   ?? r.toEntity.slice(0, 8);
       return `| ${from} | ${r.kind} | ${to} | ${Math.round(r.confidence * 100)}% |`;
     }),
     ``,
     `## Timeline (${events.length} events)`,
     ``,
     ...events.map(
-      (e) =>
-        `- **[${e.ts.slice(0, 19).replace("T", " ")}]** \`${e.kind}\` — ${summarizeEventMd(e)}`
+      (e) => `- **[${e.ts.slice(0, 19).replace("T", " ")}]** \`${e.kind}\` — ${summarizeMd(e)}`
     ),
     ``,
     `---`,
     `*Generated by Vellum OSINT Studio · ${new Date().toLocaleDateString("en-GB")}*`,
   ];
-
   const blob = new Blob([lines.join("\n")], { type: "text/markdown" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `vellum-${c.title.toLowerCase().replace(/\s+/g, "-")}.md`;
+  a.download = `vellum-${title.toLowerCase().replace(/\s+/g, "-")}.md`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
 }
 
-// ── Component ────────────────────────────────────────────────────────────────
+// ── Shared field styles ──────────────────────────────────────────────────────
+const fieldBase: React.CSSProperties = {
+  width: "100%",
+  fontFamily: "var(--font-display)",
+  fontSize: 13,
+  fontWeight: 500,
+  color: colors.ink,
+  background: "transparent",
+  border: "none",
+  borderBottom: `1px solid ${colors.hairlineStrong}`,
+  padding: "7px 0",
+  outline: "none",
+  letterSpacing: "-0.005em",
+};
+
+// ── Section editor ────────────────────────────────────────────────────────────
+function SectionEditor({
+  idx,
+  draft,
+  onChange,
+}: {
+  idx: string;
+  draft: ReportDraft;
+  onChange: (d: ReportDraft) => void;
+}) {
+  const setDraft = (fn: (d: ReportDraft) => ReportDraft) => onChange(fn(draft));
+
+  if (idx === "01") {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 16, paddingTop: 4 }}>
+        {/* Title */}
+        <div>
+          <Eyebrow style={{ fontSize: 9, marginBottom: 6 }}>Report title</Eyebrow>
+          <input
+            value={draft.title}
+            placeholder={`Default: case title`}
+            onChange={(e) => setDraft((d) => ({ ...d, title: e.target.value }))}
+            style={{ ...fieldBase }}
+          />
+        </div>
+
+        {/* Classification */}
+        <div>
+          <Eyebrow style={{ fontSize: 9, marginBottom: 8 }}>Classification</Eyebrow>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+            {CLASSIFICATIONS.map((cl) => {
+              const { bg, fg } = classificationColors[cl];
+              const active = draft.classification === cl;
+              return (
+                <button
+                  key={cl}
+                  onClick={() => setDraft((d) => ({ ...d, classification: cl }))}
+                  style={{
+                    padding: "5px 12px",
+                    borderRadius: radius.pill,
+                    fontSize: 11,
+                    fontFamily: "var(--font-display)",
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    border: active ? `1.5px solid ${fg}` : `1.5px solid ${colors.hairlineStrong}`,
+                    background: active ? bg : "transparent",
+                    color: active ? fg : colors.inkMute,
+                    transition: "all 140ms",
+                  }}
+                >
+                  {cl}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Summary */}
+        <div>
+          <Eyebrow style={{ fontSize: 9, marginBottom: 6 }}>Executive summary</Eyebrow>
+          <textarea
+            value={draft.summary}
+            placeholder="Optional — appears on the cover page before the case table."
+            onChange={(e) => setDraft((d) => ({ ...d, summary: e.target.value }))}
+            rows={4}
+            style={{
+              ...fieldBase,
+              resize: "none",
+              lineHeight: 1.6,
+              borderBottom: "none",
+              border: `1px solid ${colors.hairlineStrong}`,
+              borderRadius: radius.sm,
+              padding: "10px 12px",
+              background: colors.paperLow,
+            }}
+          />
+        </div>
+
+        {/* Analyst */}
+        <div>
+          <Eyebrow style={{ fontSize: 9, marginBottom: 6 }}>Analyst</Eyebrow>
+          <input
+            value={draft.analyst}
+            placeholder="Vellum OSINT Studio"
+            onChange={(e) => setDraft((d) => ({ ...d, analyst: e.target.value }))}
+            style={{ ...fieldBase }}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  // Generic section editor (02–06)
+  const sec = draft.sections[idx];
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 14, paddingTop: 4 }}>
+      {/* Notes */}
+      <div>
+        <Eyebrow style={{ fontSize: 9, marginBottom: 6 }}>Section notes</Eyebrow>
+        <textarea
+          value={sec?.notes ?? ""}
+          placeholder="Optional note appended to this section."
+          disabled={sec?.enabled === false}
+          onChange={(e) => {
+            const notes = e.target.value;
+            setDraft((d) => ({
+              ...d,
+              sections: { ...d.sections, [idx]: { ...d.sections[idx], notes } },
+            }));
+          }}
+          rows={3}
+          style={{
+            ...fieldBase,
+            resize: "none",
+            lineHeight: 1.6,
+            borderBottom: "none",
+            border: `1px solid ${colors.hairlineStrong}`,
+            borderRadius: radius.sm,
+            padding: "10px 12px",
+            background: sec?.enabled === false ? colors.paperLow : colors.paperLow,
+            opacity: sec?.enabled === false ? 0.4 : 1,
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
+// ── Main component ────────────────────────────────────────────────────────────
 export function ReportsScreen() {
   const routerCaseId = useRouter((s) => s.caseId);
-  const cases = useCases((s) => s.cases.filter((c) => c.status !== "Archived"));
-  const load = useEntities((s) => s.load);
-  const byCase = useEntities((s) => s.byCase);
+  const cases        = useCases((s) => s.cases.filter((c) => c.status !== "Archived"));
+  const load         = useEntities((s) => s.load);
+  const byCase       = useEntities((s) => s.byCase);
 
-  // Selected case: prefer router's caseId, fall back to first case
   const [selectedCaseId, setSelectedCaseId] = useState<string | null>(
     routerCaseId ?? (cases.length > 0 ? cases[0].id : null)
   );
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [openSection, setOpenSection] = useState<string | null>("01");
+  const [draft, setDraft] = useState<ReportDraft>(() =>
+    makeDraft(cases.find((c) => c.id === (routerCaseId ?? cases[0]?.id))?.title ?? "")
+  );
 
-  // Sync with router when it changes
+  // Sync with router
   useEffect(() => {
     if (routerCaseId) setSelectedCaseId(routerCaseId);
   }, [routerCaseId]);
 
-  // Default to first case when cases load
+  // Default to first case
   useEffect(() => {
-    if (!selectedCaseId && cases.length > 0) {
-      setSelectedCaseId(cases[0].id);
-    }
+    if (!selectedCaseId && cases.length > 0) setSelectedCaseId(cases[0].id);
   }, [cases, selectedCaseId]);
 
   // Load data
   useEffect(() => {
-    if (selectedCaseId && !byCase[selectedCaseId]) {
-      load(selectedCaseId);
-    }
+    if (selectedCaseId && !byCase[selectedCaseId]) load(selectedCaseId);
   }, [selectedCaseId, load, byCase]);
 
-  const c = cases.find((x) => x.id === selectedCaseId) ?? null;
-  const caseData = selectedCaseId ? byCase[selectedCaseId] : null;
-  const entities = caseData?.entities ?? [];
-  const relations = caseData?.relations ?? [];
-  const events = caseData?.events ?? [];
-  const dataLoading = caseData?.loading ?? false;
+  // Sync draft title when case changes
+  const prevCaseId = useRef<string | null>(null);
+  useEffect(() => {
+    if (selectedCaseId && selectedCaseId !== prevCaseId.current) {
+      const c = cases.find((x) => x.id === selectedCaseId);
+      if (c) {
+        setDraft((d) => (d.title ? d : { ...d, title: "" }));
+      }
+      prevCaseId.current = selectedCaseId;
+    }
+  }, [selectedCaseId, cases]);
+
+  const c          = cases.find((x) => x.id === selectedCaseId) ?? null;
+  const caseData   = selectedCaseId ? byCase[selectedCaseId] : null;
+  const entities   = caseData?.entities  ?? [];
+  const relations  = caseData?.relations ?? [];
+  const events     = caseData?.events    ?? [];
+  const dataLoading = caseData?.loading  ?? false;
 
   const compiledAt = new Date().toLocaleDateString("en-GB", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
+    day: "2-digit", month: "short", year: "numeric",
   });
+
+  const reportTitle   = draft.title.trim() || c?.title || "Untitled";
+  const classification = draft.classification;
+  const { bg: clBg, fg: clFg } = classificationColors[classification];
 
   return (
     <div style={{ ...page.standard }}>
@@ -172,14 +348,13 @@ export function ReportsScreen() {
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1.15fr", gap: 28 }}>
-        {/* ── Editor side ──────────────────────────────────────────────── */}
+
+        {/* ── Left column ──────────────────────────────────────────────── */}
         <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
 
           {/* Case picker */}
           <Card padding="16px 20px">
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-              <Eyebrow>Subject case</Eyebrow>
-            </div>
+            <Eyebrow style={{ marginBottom: 8 }}>Subject case</Eyebrow>
             <div style={{ position: "relative" }}>
               <button
                 onClick={() => setPickerOpen((v) => !v)}
@@ -199,18 +374,13 @@ export function ReportsScreen() {
                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                   {c ? (
                     <>
-                      <div
-                        style={{
-                          width: 8,
-                          height: 8,
-                          borderRadius: 999,
-                          background:
-                            c.accent === "ember" ? colors.ember :
-                            c.accent === "solar" ? "#A07810" :
-                            c.accent === "moss"  ? colors.moss : colors.ink,
-                          flexShrink: 0,
-                        }}
-                      />
+                      <div style={{
+                        width: 8, height: 8, borderRadius: 999, flexShrink: 0,
+                        background:
+                          c.accent === "ember" ? colors.ember :
+                          c.accent === "solar" ? "#A07810" :
+                          c.accent === "moss"  ? colors.moss : colors.ink,
+                      }} />
                       <Mono style={{ fontSize: 12, color: colors.ink }}>{c.title}</Mono>
                     </>
                   ) : (
@@ -218,56 +388,35 @@ export function ReportsScreen() {
                   )}
                 </div>
                 <ChevronDown
-                  size={13}
-                  strokeWidth={1.8}
-                  color={colors.inkMute}
+                  size={13} strokeWidth={1.8} color={colors.inkMute}
                   style={{ transform: pickerOpen ? "rotate(180deg)" : "none", transition: "transform 150ms" }}
                 />
               </button>
 
               {pickerOpen && cases.length > 0 && (
-                <div
-                  style={{
-                    position: "absolute",
-                    top: "calc(100% + 6px)",
-                    left: 0,
-                    right: 0,
-                    background: colors.paper,
-                    border: `1px solid ${colors.hairlineStrong}`,
-                    borderRadius: radius.md,
-                    boxShadow: shadow.md,
-                    zIndex: 40,
-                    overflow: "hidden",
-                  }}
-                >
+                <div style={{
+                  position: "absolute", top: "calc(100% + 6px)", left: 0, right: 0,
+                  background: colors.paper, border: `1px solid ${colors.hairlineStrong}`,
+                  borderRadius: radius.md, boxShadow: shadow.md, zIndex: 40, overflow: "hidden",
+                }}>
                   {cases.map((ca) => (
                     <button
                       key={ca.id}
                       onClick={() => { setSelectedCaseId(ca.id); setPickerOpen(false); }}
                       style={{
-                        width: "100%",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 10,
-                        padding: "10px 14px",
+                        width: "100%", display: "flex", alignItems: "center", gap: 10,
+                        padding: "10px 14px", textAlign: "left", cursor: "pointer",
                         background: ca.id === selectedCaseId ? colors.paperWarm : "transparent",
-                        cursor: "pointer",
                         borderBottom: `1px solid ${colors.hairline}`,
-                        textAlign: "left",
                       }}
                     >
-                      <div
-                        style={{
-                          width: 7,
-                          height: 7,
-                          borderRadius: 999,
-                          flexShrink: 0,
-                          background:
-                            ca.accent === "ember" ? colors.ember :
-                            ca.accent === "solar" ? "#A07810" :
-                            ca.accent === "moss"  ? colors.moss : colors.ink,
-                        }}
-                      />
+                      <div style={{
+                        width: 7, height: 7, borderRadius: 999, flexShrink: 0,
+                        background:
+                          ca.accent === "ember" ? colors.ember :
+                          ca.accent === "solar" ? "#A07810" :
+                          ca.accent === "moss"  ? colors.moss : colors.ink,
+                      }} />
                       <Mono style={{ fontSize: 11, color: colors.ink }}>{ca.title}</Mono>
                       <div style={{ marginLeft: "auto" }}>
                         <Badge tone={ca.kind === "Cyber" ? "ember" : ca.kind === "Person" ? "sky" : ca.kind === "Brand" ? "solar" : "paper"}>
@@ -281,7 +430,7 @@ export function ReportsScreen() {
             </div>
 
             {c && !dataLoading && (
-              <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+              <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
                 <Mono style={{ fontSize: 11, color: colors.inkFade }}>{entities.length} entities</Mono>
                 <Mono style={{ fontSize: 11, color: colors.hairlineStrong }}>·</Mono>
                 <Mono style={{ fontSize: 11, color: colors.inkFade }}>{relations.length} relations</Mono>
@@ -289,32 +438,129 @@ export function ReportsScreen() {
                 <Mono style={{ fontSize: 11, color: colors.inkFade }}>{events.length} events</Mono>
               </div>
             )}
-            {dataLoading && (
-              <Mono style={{ fontSize: 11, color: colors.inkFade, marginTop: 8 }}>Loading…</Mono>
-            )}
+            {dataLoading && <Mono style={{ fontSize: 11, color: colors.inkFade, marginTop: 8 }}>Loading…</Mono>}
           </Card>
 
-          {/* Sections */}
+          {/* Sections — expandable editor */}
           <Card padding="22px 24px">
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
               <H3>Sections</H3>
-              <Mono style={{ color: colors.inkFade }}>06</Mono>
+              <Mono style={{ color: colors.inkFade }}>
+                {SECTIONS.filter((s) => draft.sections[s.idx]?.enabled !== false).length} / {SECTIONS.length}
+              </Mono>
             </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              {SECTIONS.map((s) => (
-                <ListRow
-                  key={s.idx}
-                  emphasis={s.active}
-                  leading={
-                    <IconTile tone={s.tone} size={36} filled={s.active}>
-                      <s.Icon size={16} strokeWidth={1.8} />
-                    </IconTile>
-                  }
-                  title={s.title}
-                  subtitle={`Section ${s.idx}`}
-                  trailing={<MoreHorizontal size={16} strokeWidth={1.8} color={colors.inkFade} />}
-                />
-              ))}
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+              {SECTIONS.map((sec) => {
+                const isOpen    = openSection === sec.idx;
+                const enabled   = draft.sections[sec.idx]?.enabled !== false;
+                const isCover   = sec.idx === "01";
+
+                return (
+                  <div key={sec.idx}>
+                    {/* Row */}
+                    <div
+                      onClick={() => setOpenSection(isOpen ? null : sec.idx)}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 12,
+                        padding: "10px 12px",
+                        borderRadius: radius.md,
+                        cursor: "pointer",
+                        background: isOpen ? colors.paperWarm : "transparent",
+                        transition: "background 140ms",
+                        opacity: enabled ? 1 : 0.45,
+                      }}
+                    >
+                      <IconTile tone={sec.tone} size={34} filled={isOpen}>
+                        <sec.Icon size={15} strokeWidth={1.8} />
+                      </IconTile>
+
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{
+                          fontFamily: "var(--font-display)", fontWeight: 600,
+                          fontSize: 14, color: colors.ink, letterSpacing: "-0.005em",
+                        }}>
+                          {sec.title}
+                        </div>
+                        <div style={{ fontSize: 12, color: colors.inkMute, marginTop: 1 }}>
+                          Section {sec.idx}
+                        </div>
+                      </div>
+
+                      {/* Toggle (not on cover) */}
+                      {!isCover && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDraft((d) => ({
+                              ...d,
+                              sections: {
+                                ...d.sections,
+                                [sec.idx]: { ...d.sections[sec.idx], enabled: !enabled },
+                              },
+                            }));
+                          }}
+                          style={{
+                            width: 32, height: 18, borderRadius: 999,
+                            background: enabled ? colors.moss : colors.hairlineStrong,
+                            border: "none", cursor: "pointer",
+                            position: "relative", flexShrink: 0,
+                            transition: "background 160ms",
+                          }}
+                        >
+                          <div style={{
+                            position: "absolute",
+                            top: 2, left: enabled ? 16 : 2,
+                            width: 14, height: 14,
+                            borderRadius: 999, background: "white",
+                            boxShadow: "0 1px 3px rgba(0,0,0,.18)",
+                            transition: "left 160ms",
+                          }} />
+                        </button>
+                      )}
+
+                      <ChevronRight
+                        size={14} strokeWidth={1.8} color={colors.inkMute}
+                        style={{
+                          transform: isOpen ? "rotate(90deg)" : "none",
+                          transition: "transform 160ms",
+                          flexShrink: 0,
+                        }}
+                      />
+                    </div>
+
+                    {/* Inline editor */}
+                    <AnimatePresence initial={false}>
+                      {isOpen && (
+                        <motion.div
+                          key="editor"
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: "auto", opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          transition={{ duration: 0.22, ease: [0.32, 0.72, 0, 1] }}
+                          style={{ overflow: "hidden" }}
+                        >
+                          <div style={{
+                            margin: "4px 0 8px",
+                            padding: "14px 16px",
+                            background: colors.paperLow,
+                            borderRadius: radius.md,
+                            border: `1px solid ${colors.hairline}`,
+                          }}>
+                            <SectionEditor
+                              idx={sec.idx}
+                              draft={draft}
+                              onChange={setDraft}
+                            />
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                );
+              })}
             </div>
           </Card>
 
@@ -336,23 +582,20 @@ export function ReportsScreen() {
                 <PDFDownloadLink
                   document={
                     <VellumPdfDocument
-                      c={c}
-                      entities={entities}
-                      relations={relations}
-                      events={events}
+                      c={c} entities={entities} relations={relations}
+                      events={events} draft={draft}
                     />
                   }
-                  fileName={`vellum-${c.title.toLowerCase().replace(/\s+/g, "-")}.pdf`}
+                  fileName={`vellum-${reportTitle.toLowerCase().replace(/\s+/g, "-")}.pdf`}
                   style={{ textDecoration: "none" }}
                 >
-                  {({ loading: pdfLoading }) => (
+                  {({ loading: pdfBuilding }) => (
                     <Button
-                      variant="ember"
-                      size="md"
+                      variant="ember" size="md"
                       icon={<FileDown size={16} strokeWidth={1.8} />}
-                      disabled={pdfLoading || dataLoading}
+                      disabled={pdfBuilding || dataLoading}
                     >
-                      {pdfLoading ? "Building…" : "Generate PDF"}
+                      {pdfBuilding ? "Building…" : "Generate PDF"}
                     </Button>
                   )}
                 </PDFDownloadLink>
@@ -362,11 +605,10 @@ export function ReportsScreen() {
                 </Button>
               )}
               <Button
-                variant="ghost"
-                size="md"
+                variant="ghost" size="md"
                 icon={<FileCode size={16} strokeWidth={1.8} />}
                 disabled={!c || dataLoading}
-                onClick={() => c && downloadMarkdown(c, entities, relations, events)}
+                onClick={() => c && downloadMarkdown(c, entities, relations, events, draft)}
                 style={{
                   background: "rgba(245,239,224,0.08)",
                   color: colors.paper,
@@ -397,43 +639,42 @@ export function ReportsScreen() {
               border: `1px solid ${colors.hairline}`,
             }}
           >
-            {/* Page header */}
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                paddingBottom: 16,
-                borderBottom: `1px solid ${colors.hairline}`,
-              }}
-            >
+            {/* Header */}
+            <div style={{
+              display: "flex", justifyContent: "space-between", alignItems: "center",
+              paddingBottom: 16, borderBottom: `1px solid ${colors.hairline}`,
+            }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <div
-                  style={{
-                    width: 28,
-                    height: 28,
-                    background: colors.ink,
-                    color: colors.paper,
-                    borderRadius: radius.sm,
-                    display: "grid",
-                    placeItems: "center",
-                    fontFamily: "var(--font-display)",
-                    fontWeight: 800,
-                    fontSize: 13,
-                  }}
-                >
-                  V
-                </div>
+                <div style={{
+                  width: 28, height: 28, background: colors.ink, color: colors.paper,
+                  borderRadius: radius.sm, display: "grid", placeItems: "center",
+                  fontFamily: "var(--font-display)", fontWeight: 800, fontSize: 13,
+                }}>V</div>
                 <Eyebrow>Vellum · {c ? c.title : "no case selected"}</Eyebrow>
               </div>
               <Mono style={{ color: colors.inkFade }}>page 01</Mono>
             </div>
 
-            {/* Title */}
-            <div style={{ marginTop: 32 }}>
-              <Badge tone="ember" dot>Confidential</Badge>
-              <H1 style={{ marginTop: 12 }}>
-                {c ? c.title : <span style={{ color: colors.inkMute }}>Select a case</span>}
+            {/* Classification badge */}
+            <div style={{ marginTop: 28 }}>
+              <div style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 5,
+                padding: "4px 10px",
+                borderRadius: radius.pill,
+                background: clBg,
+                marginBottom: 14,
+              }}>
+                <div style={{ width: 6, height: 6, borderRadius: 999, background: clFg }} />
+                <span style={{ fontSize: 11, fontWeight: 600, color: clFg, fontFamily: "var(--font-display)" }}>
+                  {classification}
+                </span>
+              </div>
+
+              {/* Title — live preview */}
+              <H1 style={{ lineHeight: 1.15 }}>
+                {reportTitle || <span style={{ color: colors.inkMute }}>Select a case</span>}
               </H1>
               <BodySmall style={{ marginTop: 8, color: colors.inkMute }}>
                 {c
@@ -444,70 +685,60 @@ export function ReportsScreen() {
             </div>
 
             {/* Stat chips */}
-            <div style={{ marginTop: 28, display: "flex", gap: 10, flexWrap: "wrap" }}>
-              <Chip tone="ember" Icon={Boxes}       label={String(entities.length)}  sub="entities" />
+            <div style={{ marginTop: 24, display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <Chip tone="ember" Icon={Boxes}       label={String(entities.length)}  sub="entities"  />
               <Chip tone="moss"  Icon={Sparkles}    label={String(relations.length)} sub="relations" />
-              <Chip tone="solar" Icon={History}     label={String(events.length)}    sub="events" />
-              <Chip tone="sky"   Icon={ShieldCheck} label="OK"                       sub="chain ok" />
+              <Chip tone="solar" Icon={History}     label={String(events.length)}    sub="events"    />
+              <Chip tone="sky"   Icon={ShieldCheck} label="OK"                       sub="chain ok"  />
             </div>
 
+            {/* Executive summary preview */}
+            {draft.summary.trim() && (
+              <div style={{ marginTop: 22 }}>
+                <Eyebrow style={{ marginBottom: 6 }}>§01 · Executive summary</Eyebrow>
+                <Body style={{ color: colors.inkMute, fontSize: 12, lineHeight: 1.6 }}>
+                  {draft.summary.length > 220 ? draft.summary.slice(0, 220) + "…" : draft.summary}
+                </Body>
+              </div>
+            )}
+
             {/* Case meta */}
-            {c && (
-              <div style={{ marginTop: 24 }}>
-                <Eyebrow>§01 · Case information</Eyebrow>
+            {c && !draft.summary.trim() && (
+              <div style={{ marginTop: 22 }}>
+                <Eyebrow style={{ marginBottom: 6 }}>§01 · Case information</Eyebrow>
                 {[
                   ["Type",    c.kind],
                   ["Status",  c.status],
                   ...(c.legalBasis ? [["Legal basis", c.legalBasis]] : []),
-                  ["Opened",  new Date(c.createdAt).toLocaleDateString("en-GB")],
+                  ["Analyst", draft.analyst.trim() || "Vellum OSINT Studio"],
                 ].map(([k, v]) => (
-                  <div
-                    key={k}
-                    style={{
-                      display: "flex",
-                      gap: 12,
-                      padding: "6px 0",
-                      borderBottom: `1px solid ${colors.hairline}`,
-                    }}
-                  >
-                    <Mono style={{ width: 100, fontSize: 10.5, color: colors.inkMute, flexShrink: 0 }}>{k}</Mono>
+                  <div key={k} style={{
+                    display: "flex", gap: 12, padding: "5px 0",
+                    borderBottom: `1px solid ${colors.hairline}`,
+                  }}>
+                    <Mono style={{ width: 90, fontSize: 10.5, color: colors.inkMute, flexShrink: 0 }}>{k}</Mono>
                     <Mono style={{ fontSize: 10.5, color: colors.ink }}>{v}</Mono>
                   </div>
                 ))}
               </div>
             )}
 
-            {/* Footer chip */}
-            <div
-              style={{
-                position: "absolute",
-                left: 48,
-                bottom: 28,
-                display: "flex",
-                gap: 8,
-              }}
-            >
+            {/* Footer badges */}
+            <div style={{ position: "absolute", left: 48, bottom: 28, display: "flex", gap: 8 }}>
               <Badge tone="paper">
                 {c ? `ID ${c.id.slice(0, 6).toUpperCase()}` : "No case"}
               </Badge>
-              <Badge tone="ember">Confidential</Badge>
+              <Badge tone="ember">{classification}</Badge>
             </div>
 
             {/* HMAC stamp */}
-            <div
-              style={{
-                position: "absolute",
-                right: 36,
-                bottom: 28,
-                display: "flex",
-                alignItems: "center",
-                gap: 10,
-                padding: "8px 14px 8px 8px",
-                background: colors.emberSoft,
-                borderRadius: radius.pill,
-                border: `1px solid ${colors.ember}`,
-              }}
-            >
+            <div style={{
+              position: "absolute", right: 36, bottom: 28,
+              display: "flex", alignItems: "center", gap: 10,
+              padding: "8px 14px 8px 8px",
+              background: colors.emberSoft, borderRadius: radius.pill,
+              border: `1px solid ${colors.ember}`,
+            }}>
               <IconTile tone="ember" size={26} filled>
                 <Check size={12} strokeWidth={2.5} />
               </IconTile>
@@ -517,51 +748,32 @@ export function ReportsScreen() {
             </div>
           </div>
         </motion.div>
+
       </div>
     </div>
   );
 }
 
-// ── Chip subcomponent ────────────────────────────────────────────────────────
-function Chip({
-  tone,
-  Icon,
-  label,
-  sub,
-}: {
+// ── Chip ─────────────────────────────────────────────────────────────────────
+function Chip({ tone, Icon, label, sub }: {
   tone: "ember" | "solar" | "moss" | "sky";
   Icon: LucideIcon;
   label: string;
   sub: string;
 }) {
-  const bg =
-    tone === "ember" ? colors.emberSoft :
-    tone === "solar" ? colors.solarSoft :
-    tone === "moss"  ? colors.mossSoft  :
-                       colors.skySoft;
-  const fg =
-    tone === "ember" ? colors.ember :
-    tone === "solar" ? "#A07810" :
-    tone === "moss"  ? colors.moss :
-                       colors.sky;
+  const bg = tone === "ember" ? colors.emberSoft : tone === "solar" ? colors.solarSoft : tone === "moss" ? colors.mossSoft : colors.skySoft;
+  const fg = tone === "ember" ? colors.ember : tone === "solar" ? "#A07810" : tone === "moss" ? colors.moss : colors.sky;
   return (
-    <div
-      style={{
-        background: bg,
-        color: fg,
-        padding: "12px 14px",
-        borderRadius: radius.lg,
-        display: "flex",
-        flexDirection: "column",
-        gap: 4,
-        minWidth: 84,
-      }}
-    >
-      <Icon size={14} strokeWidth={2} style={{ opacity: 0.85 }} />
-      <span style={{ fontFamily: "var(--font-display)", fontWeight: 800, fontSize: 20, letterSpacing: "-0.02em", marginTop: 2 }}>
+    <div style={{
+      background: bg, color: fg, padding: "10px 12px",
+      borderRadius: radius.lg, display: "flex", flexDirection: "column",
+      gap: 3, minWidth: 78,
+    }}>
+      <Icon size={13} strokeWidth={2} style={{ opacity: 0.85 }} />
+      <span style={{ fontFamily: "var(--font-display)", fontWeight: 800, fontSize: 18, letterSpacing: "-0.02em", marginTop: 2 }}>
         {label}
       </span>
-      <span style={{ fontSize: 11, fontWeight: 500, opacity: 0.75 }}>{sub}</span>
+      <span style={{ fontSize: 10, fontWeight: 500, opacity: 0.75 }}>{sub}</span>
     </div>
   );
 }

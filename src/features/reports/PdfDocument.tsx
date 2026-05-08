@@ -6,7 +6,7 @@ import {
   StyleSheet,
   Font,
 } from "@react-pdf/renderer";
-import type { Case, Entity, Relation, Event as DomainEvent } from "@/lib/types";
+import type { Case, Entity, Relation, Event as DomainEvent, ReportDraft } from "@/lib/types";
 
 // ── Fonts ────────────────────────────────────────────────────────────────────
 Font.register({
@@ -160,11 +160,20 @@ type Props = {
   entities: Entity[];
   relations: Relation[];
   events: DomainEvent[];
+  draft?: ReportDraft;
 };
 
-export function VellumPdfDocument({ c, entities, relations, events }: Props) {
+export function VellumPdfDocument({ c, entities, relations, events, draft }: Props) {
   const compiledAt = new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
   const finalHash = events.length > 0 ? events[events.length - 1].hash : "—";
+
+  const reportTitle     = draft?.title.trim()    || c.title;
+  const classification  = draft?.classification  ?? "Confidential";
+  const summary         = draft?.summary.trim()  ?? "";
+  const analyst         = draft?.analyst.trim()  || "Vellum OSINT Studio";
+
+  // Section visibility
+  const sectionOn = (idx: string) => draft?.sections[idx]?.enabled !== false;
 
   // ── PAGE 1 — Cover ───────────────────────────────────────────────────
   const CoverPage = (
@@ -172,10 +181,10 @@ export function VellumPdfDocument({ c, entities, relations, events }: Props) {
       <DocHeader caseTitle={c.title} pageNum="01" />
 
       {/* Badge */}
-      <Text style={s.coverBadge}>Confidential</Text>
+      <Text style={s.coverBadge}>{classification}</Text>
 
       {/* Title */}
-      <Text style={s.coverTitle}>{c.title}</Text>
+      <Text style={s.coverTitle}>{reportTitle}</Text>
       <Text style={s.coverSub}>
         Compiled {compiledAt} · {entities.length} entities · {relations.length} relations · {events.length} events · ledger verified
       </Text>
@@ -195,6 +204,14 @@ export function VellumPdfDocument({ c, entities, relations, events }: Props) {
         ))}
       </View>
 
+      {/* Executive summary */}
+      {summary.length > 0 && (
+        <View style={{ marginBottom: 28 }}>
+          <Text style={s.eyebrow}>Executive summary</Text>
+          <Text style={[s.body, { marginTop: 4 }]}>{summary}</Text>
+        </View>
+      )}
+
       {/* Case meta */}
       <Text style={s.eyebrow}>Case information</Text>
       {[
@@ -203,6 +220,7 @@ export function VellumPdfDocument({ c, entities, relations, events }: Props) {
         ["Legal basis",  c.legalBasis ?? "—"],
         ["Opened",       new Date(c.createdAt).toLocaleDateString("en-GB")],
         ["Last updated", new Date(c.updatedAt).toLocaleDateString("en-GB")],
+        ["Analyst",      analyst],
         ["Case ID",      c.id.toUpperCase()],
       ].map(([k, v]) => (
         <View key={k} style={{ flexDirection: "row", paddingVertical: 6, borderBottom: `1px solid ${C.line}` }}>
@@ -390,16 +408,16 @@ export function VellumPdfDocument({ c, entities, relations, events }: Props) {
 
   return (
     <Document
-      title={`Vellum — ${c.title}`}
-      author="Vellum OSINT Studio"
+      title={`Vellum — ${reportTitle}`}
+      author={analyst}
       subject="Chain-of-custody forensic report"
       keywords="osint, forensic, chain-of-custody"
     >
       {CoverPage}
-      {EntitiesPages}
-      {RelationsPages}
-      {EventPages}
-      {ChainPage}
+      {sectionOn("02") && EntitiesPages}
+      {sectionOn("03") && RelationsPages}
+      {sectionOn("04") && EventPages}
+      {sectionOn("05") && ChainPage}
     </Document>
   );
 }
