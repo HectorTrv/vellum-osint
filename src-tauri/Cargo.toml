@@ -1,0 +1,47 @@
+[package]
+name = "vellum"
+version = "0.1.0"
+edition = "2021"
+description = "Vellum — editorial OSINT studio"
+authors = ["Vellum Studio"]
+license = "MIT"
+
+[lib]
+name = "vellum_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+anyhow = "1"
+thiserror = "1"
+
+# Persistence — SQLite + SQLCipher bundled (no system lib required)
+rusqlite = { version = "0.32", features = ["bundled-sqlcipher", "chrono", "serde_json"] }
+
+# Crypto — master key in OS keychain, HMAC ledger
+keyring = "3"
+rand = "0.8"
+hex = "0.4"
+hmac = "0.12"
+sha2 = "0.10"
+
+# Utilities
+uuid = { version = "1", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+directories = "5"
+parking_lot = "0.12"
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
+
+[dev-dependencies]
+tempfile = "3"

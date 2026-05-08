@@ -1,0 +1,24 @@
+# deps & build
+node_modules/
+dist/
+dist-ssr/
+.vite/
+
+# claude
+.claude/
+
+# editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.local
+*.log
+
+# tauri
+src-tauri/target/
+src-tauri/gen/schemas/
+
+# env
+.env
+.env.local
+.env.*.local
