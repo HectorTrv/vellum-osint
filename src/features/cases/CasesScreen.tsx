@@ -130,50 +130,56 @@ export function CasesScreen() {
           </BodySmall>
         </div>
 
-        {/* Toolbar */}
+        {/* Toolbar — single flat row */}
         <div
           style={{
             display: "flex",
-            gap: 14,
-            alignItems: "flex-end",
+            gap: 8,
+            alignItems: "center",
             marginBottom: 24,
           }}
         >
-          <div style={{ flex: 1, maxWidth: 380 }}>
+          {/* Search */}
+          <div style={{ width: 260 }}>
             <Input
-              label="Search dossiers"
-              placeholder="vermilion · phishing · J.D."
+              placeholder="Search dossiers…"
               leading={<Search size={14} strokeWidth={1.8} />}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
             />
           </div>
-          <div style={{ display: "flex", gap: 6, paddingBottom: 10 }}>
-            <FilterChip active={filter === "All"} onClick={() => setFilter("All")} label="All" count={counts.all} />
-            <FilterChip active={filter === "Active"} onClick={() => setFilter("Active")} label="Active" count={counts.active} tone="moss" />
-            <FilterChip active={filter === "Idle"} onClick={() => setFilter("Idle")} label="Idle" count={counts.idle} tone="solar" />
+
+          {/* Separator */}
+          <div style={{ width: 1, height: 20, background: colors.hairlineStrong, flexShrink: 0 }} />
+
+          {/* Filter chips */}
+          <div style={{ display: "flex", gap: 4 }}>
+            <FilterChip active={filter === "All"}      onClick={() => setFilter("All")}      label="All"      count={counts.all} />
+            <FilterChip active={filter === "Active"}   onClick={() => setFilter("Active")}   label="Active"   count={counts.active}   tone="moss" />
+            <FilterChip active={filter === "Idle"}     onClick={() => setFilter("Idle")}     label="Idle"     count={counts.idle}     tone="solar" />
             <FilterChip active={filter === "Archived"} onClick={() => setFilter("Archived")} label="Archived" count={counts.archived} />
           </div>
+
           <div style={{ flex: 1 }} />
-          <div style={{ display: "flex", gap: 8, alignItems: "flex-end", paddingBottom: 4 }}>
-            <SortMenu
-              open={sortMenuOpen}
-              setOpen={setSortMenuOpen}
-              current={sort}
-              onPick={(s) => {
-                setSort(s);
-                setSortMenuOpen(false);
-              }}
-            />
-            <Button
-              variant="primary"
-              size="md"
-              icon={<Plus size={16} strokeWidth={2.2} />}
-              onClick={() => setModalOpen(true)}
-            >
-              New case
-            </Button>
-          </div>
+
+          {/* Sort + New */}
+          <SortMenu
+            open={sortMenuOpen}
+            setOpen={setSortMenuOpen}
+            current={sort}
+            onPick={(s) => {
+              setSort(s);
+              setSortMenuOpen(false);
+            }}
+          />
+          <Button
+            variant="primary"
+            size="md"
+            icon={<Plus size={16} strokeWidth={2.2} />}
+            onClick={() => setModalOpen(true)}
+          >
+            New case
+          </Button>
         </div>
 
         {error && (
@@ -323,20 +329,21 @@ function FilterChip({
     <button
       onClick={onClick}
       style={{
-        padding: "7px 14px",
-        background: active ? colors.ink : colors.paperLow,
+        height: 36,
+        padding: "0 12px",
+        background: active ? colors.ink : "transparent",
         color: active ? colors.paper : colors.inkMute,
-        border: `1px solid ${active ? colors.ink : colors.hairline}`,
+        border: `1px solid ${active ? colors.ink : colors.hairlineStrong}`,
         borderRadius: radius.pill,
         fontFamily: "var(--font-display)",
         fontSize: 12,
         fontWeight: 600,
-        letterSpacing: "0.005em",
         cursor: "pointer",
         display: "inline-flex",
         alignItems: "center",
         gap: 6,
-        transition: "all 160ms",
+        transition: "background 140ms, color 140ms, border-color 140ms",
+        whiteSpace: "nowrap",
       }}
     >
       <span>{label}</span>
@@ -344,10 +351,10 @@ function FilterChip({
         style={{
           fontFamily: "var(--font-mono)",
           fontSize: 10,
-          padding: "1px 6px",
+          padding: "1px 5px",
           borderRadius: 999,
-          background: active ? "rgba(255,255,255,0.16)" : tone ? `${accent}1A` : colors.paperWarm,
-          color: active ? colors.paper : accent,
+          background: active ? "rgba(255,255,255,0.14)" : tone ? `${accent}18` : colors.paperWarm,
+          color: active ? "rgba(255,255,255,0.85)" : accent,
         }}
       >
         {String(count).padStart(2, "0")}
@@ -355,6 +362,18 @@ function FilterChip({
     </button>
   );
 }
+
+const cardAction = (bg: string, color: string): React.CSSProperties => ({
+  width: 28,
+  height: 28,
+  display: "grid",
+  placeItems: "center",
+  borderRadius: 8,
+  background: bg,
+  color,
+  cursor: "pointer",
+  flexShrink: 0,
+});
 
 type CaseCardProps = {
   c: Case;
@@ -384,7 +403,6 @@ function CaseCard({
   const ratio = c.entityCount > 0 ? Math.round((c.relationCount / c.entityCount) * 100) : 0;
   const tone = toVisualAccent(c.accent);
   const surface = accentSurface[tone];
-  const num = `№ ${c.id.slice(0, 4).toUpperCase()}`;
   const KindIcon = KIND_ICON[c.kind] ?? Diamond;
   const isArchived = c.status === "Archived";
 
@@ -398,8 +416,7 @@ function CaseCard({
     { kind: "item", id: "delete",  label: "Delete (V0.3)",                 Icon: Trash2, danger: true, disabled: true, onSelect: () => {} },
   ];
 
-  const padding = density === "compact" ? "14px 18px 16px" : "20px 22px 22px";
-  const coverPadding = density === "compact" ? "16px 18px 14px" : "20px 22px 18px";
+  const pad = density === "compact" ? "16px 20px" : "20px 24px";
 
   return (
     <ContextMenu items={menuItems}>
@@ -411,58 +428,43 @@ function CaseCard({
           }}
           onContextMenu={open}
         >
-          <Card hover padding={0} rounded="xl" style={{ overflow: "hidden", position: "relative" }}>
-            {pinned && (
-              <div
-                style={{
-                  position: "absolute",
-                  top: 10,
-                  left: 10,
-                  zIndex: 2,
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 4,
-                  padding: "3px 8px",
-                  background: colors.ink,
-                  color: colors.paper,
-                  borderRadius: 999,
-                  fontFamily: "var(--font-display)",
-                  fontSize: 10,
-                  fontWeight: 600,
-                  letterSpacing: "0.04em",
-                }}
-              >
-                <Pin size={10} strokeWidth={2.2} fill={colors.paper} />
-                pinned
-              </div>
-            )}
-
-            {/* Cover band */}
-            <div
-              onClick={onOpen}
-              style={{
-                background: surface.soft,
-                padding: coverPadding,
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "flex-start",
-                cursor: "pointer",
-              }}
-            >
-              <IconTile tone={tone} size={42} filled>
-                <KindIcon size={18} strokeWidth={2} />
-              </IconTile>
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
+          <Card
+            hover
+            padding={0}
+            rounded="xl"
+            style={{
+              overflow: "hidden",
+              position: "relative",
+              borderTop: `2.5px solid ${surface.fg}`,
+            }}
+          >
+            <div style={{ padding: pad }}>
+              {/* Header row: icon + meta */}
+              <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14 }}>
+                <IconTile tone={tone} size={36} filled>
+                  <KindIcon size={15} strokeWidth={2} />
+                </IconTile>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <Eyebrow>{c.kind}</Eyebrow>
+                    {pinned && (
+                      <span style={{
+                        display: "inline-flex", alignItems: "center", gap: 3,
+                        padding: "1px 6px", borderRadius: 999,
+                        background: colors.ink, color: colors.paper,
+                        fontFamily: "var(--font-display)", fontSize: 9.5, fontWeight: 600, letterSpacing: "0.04em",
+                      }}>
+                        <Pin size={8} strokeWidth={2.2} fill={colors.paper} /> pinned
+                      </span>
+                    )}
+                  </div>
+                </div>
                 <Badge tone={STATUS_TONE[c.status]} dot={c.status === "Active"}>
                   {c.status}
                 </Badge>
-                <Mono style={{ color: colors.inkMute, fontSize: 11 }}>{num}</Mono>
               </div>
-            </div>
 
-            {/* Body */}
-            <div style={{ padding, background: colors.paperLow }}>
-              <Eyebrow>{c.kind}</Eyebrow>
+              {/* Title */}
               {renaming ? (
                 <RenameInput
                   initial={c.title}
@@ -477,69 +479,49 @@ function CaseCard({
                 />
               ) : (
                 <div onClick={onOpen} style={{ cursor: "pointer" }}>
-                  <H3 style={{ marginTop: 6, fontSize: 18 }}>{c.title}</H3>
+                  <H3 style={{ fontSize: density === "compact" ? 16 : 17, lineHeight: 1.25 }}>
+                    {c.title}
+                  </H3>
                 </div>
               )}
-              <Body style={{ color: colors.inkMute, marginTop: 8, fontSize: 13 }}>
-                Updated {relativeTime(c.updatedAt)}.{" "}
-                {c.entityCount > 0
-                  ? `${c.relationCount}/${c.entityCount} relations.`
-                  : "Empty dossier."}
-              </Body>
+
+              {/* Subtitle */}
+              <Mono style={{ marginTop: 6, color: colors.inkFade, fontSize: 11.5 }}>
+                Updated {relativeTime(c.updatedAt)}
+                {c.entityCount > 0 ? ` · ${c.relationCount}/${c.entityCount} relations` : " · empty dossier"}
+              </Mono>
+
+              {/* Stats footer */}
               <div
                 style={{
                   marginTop: 16,
-                  display: "flex",
-                  gap: 18,
-                  alignItems: "center",
-                  paddingTop: 14,
+                  paddingTop: 12,
                   borderTop: `1px solid ${colors.hairline}`,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 16,
                 }}
               >
-                <Stat label="entities" value={c.entityCount} />
+                <Stat label="entities"  value={c.entityCount} />
                 <Stat label="relations" value={c.relationCount} />
-                <Stat label="ratio" value={`${ratio}%`} />
+                <Stat label="ratio"     value={`${ratio}%`} />
                 <div style={{ flex: 1 }} />
                 <Tooltip label={pinned ? "Unpin" : "Pin to top"} side="top">
                   <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onTogglePin();
-                    }}
+                    onClick={(e) => { e.stopPropagation(); onTogglePin(); }}
                     aria-label={pinned ? "Unpin" : "Pin"}
-                    style={{
-                      width: 30,
-                      height: 30,
-                      display: "grid",
-                      placeItems: "center",
-                      borderRadius: radius.sm,
-                      background: pinned ? colors.ink : colors.paperWarm,
-                      color: pinned ? colors.paper : colors.inkMute,
-                      cursor: "pointer",
-                    }}
+                    style={cardAction(pinned ? colors.ink : "transparent", pinned ? colors.paper : colors.inkFade)}
                   >
-                    {pinned ? <PinOff size={14} strokeWidth={1.8} /> : <Pin size={14} strokeWidth={1.8} />}
+                    {pinned ? <PinOff size={13} strokeWidth={1.8} /> : <Pin size={13} strokeWidth={1.8} />}
                   </button>
                 </Tooltip>
                 <Tooltip label="More" side="top">
                   <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      open(e);
-                    }}
+                    onClick={(e) => { e.stopPropagation(); open(e); }}
                     aria-label="More"
-                    style={{
-                      width: 30,
-                      height: 30,
-                      display: "grid",
-                      placeItems: "center",
-                      borderRadius: radius.sm,
-                      background: colors.paperWarm,
-                      color: colors.inkMute,
-                      cursor: "pointer",
-                    }}
+                    style={cardAction("transparent", colors.inkFade)}
                   >
-                    <MoreHorizontal size={14} strokeWidth={1.8} />
+                    <MoreHorizontal size={13} strokeWidth={1.8} />
                   </button>
                 </Tooltip>
               </div>
