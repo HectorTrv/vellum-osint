@@ -104,11 +104,11 @@ export function NavRail() {
                   layoutId="navMarker"
                   style={{
                     position: "absolute",
-                    left: -10,
-                    top: 14,
-                    bottom: 14,
+                    left: -14,
+                    top: 12,
+                    bottom: 12,
                     width: 3,
-                    borderRadius: 999,
+                    borderRadius: "0 4px 4px 0",
                     background: colors.ink,
                   }}
                 />
